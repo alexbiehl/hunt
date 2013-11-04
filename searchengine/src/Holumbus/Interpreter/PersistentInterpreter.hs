@@ -8,6 +8,7 @@ module Holumbus.Interpreter.PersistentInterpreter where
 import           Control.Concurrent.MVar
 import           Control.Monad.Error
 import           Control.Monad.Reader
+--import           Control.Monad.Trans.Control
 
 import qualified Data.Binary                       as Bin
 import qualified Data.Map                          as M
@@ -25,7 +26,7 @@ import           Holumbus.Common.Occurrences       (Occurrences)
 
 import           Holumbus.Analyzer.Analyzer
 
-import qualified Holumbus.Indexer.PersistentIndexer      as Ixx
+import qualified Holumbus.Indexer.PersistentIndexer as Ixx
 
 import           Holumbus.Index.InvertedIndex
 import           Holumbus.Index.Proxy.ContextIndex (ContextIndex)
@@ -47,7 +48,6 @@ import qualified Holumbus.Interpreter.Command      as Cmd
 import           Database.Persist
 import           Database.Persist.Sql
 --import           Data.Conduit
-import Control.Monad.Trans.Control
 -- ----------------------------------------------------------------------------
 --
 -- the semantic domains (datatypes for interpretation)
@@ -61,7 +61,7 @@ import Control.Monad.Trans.Control
 -- but right now its okay to have the indexer
 -- replaceable by a type declaration
 
-type IpIndexer = ContextIndex InvertedIndex Occurrences 
+type IpIndexer = ContextIndex InvertedIndex Occurrences
 
 type Command = Cmd.Command ApiDocument
 
@@ -232,10 +232,10 @@ execSearch' f q ix
 
 wrapSearch :: Int -> Int -> Result Document -> CmdResult
 wrapSearch p pp d
-    = ResSearch 
+    = ResSearch
       . (mkPagedResult p pp)
       . map (\(_, (DocInfo d _, _)) -> unwrap d)
-      . DM.toList .  docHits 
+      . DM.toList .  docHits
       $ d
 
 wrapCompletion :: Result e -> CmdResult

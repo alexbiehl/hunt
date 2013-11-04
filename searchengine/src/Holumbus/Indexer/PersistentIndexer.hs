@@ -19,7 +19,7 @@ import           Holumbus.Common                   hiding (delete)
 import           Holumbus.Common.DocIdMap          (toDocIdSet)
 import qualified Holumbus.Common.Document          as Doc
 
-import           Holumbus.Common 
+import           Holumbus.Common
 import           Holumbus.Common.ApiDocument
 import qualified Holumbus.Index.Index              as Ix
 import qualified Holumbus.Index.TextIndex          as TIx
@@ -33,16 +33,19 @@ import qualified Database.Persist                  as DB
 
 -- ----------------------------------------------------------------------------
 
-type TextIndexerCon i m = (TIx.TextIndex i Occurrences, PersistStore m)
-type TextIndexerConVal i m val = ( TIx.TextIndex i Occurrences 
-                                 , PersistStore m 
-                                 , PersistMonadBackend m ~ PersistEntityBackend val
-                                 , PersistEntity val 
-                                 , Indexable val
-                                 )
+type TextIndexerCon i m
+    = (TIx.TextIndex i Occurrences, PersistStore m)
+
+type TextIndexerConVal i m val
+    = ( TIx.TextIndex i Occurrences
+      , PersistStore m
+      , PersistMonadBackend m ~ PersistEntityBackend val
+      , PersistEntity val
+      , Indexable val
+      )
 
 -- like apidocument but without doc info
-data IndexInfo = IndexInfo 
+data IndexInfo = IndexInfo
   { ixInfoUri :: URI
   , ixInfoIndexMap :: M.Map Context (Either WordList TextData)
   }
@@ -52,27 +55,27 @@ ixInfoToApiDoc (IndexInfo uri info) = ApiDocument uri info (M.empty)
 
 class PersistEntity x => Indexable x where
   toDocId :: Key x -> DocId
-  fromDocId :: DocId -> Key x  
+  fromDocId :: DocId -> Key x
 
   toURI :: x -> URI
-  getIndexedVals :: x -> IndexInfo 
-  
+  getIndexedVals :: x -> IndexInfo
+
 -- ----------------------------------------------------------------------------
 
 empty :: TextIndexerCon InvertedIndex m => m (ContextIndex InvertedIndex Occurrences)
-empty = return $ CIx.empty 
+empty = return $ CIx.empty
 
 -- | Insert a Document and Words.
 insert :: TextIndexerConVal i m val
        => val -> Words -> ContextIndex i Occurrences -> m (ContextIndex i Occurrences)
-insert entity wrds ix = do 
+insert entity wrds ix = do
       dbId <- DB.insert entity
       return $ TIx.addWords wrds (toDocId dbId) ix
 
 {--
 -- | Update elements
-update :: TextIndexerCon i dt 
-       => DocId -> Dt.DValue dt -> Words 
+update :: TextIndexerCon i dt
+       => DocId -> Dt.DValue dt -> Words
        -> ContextTextIndexer i dt -> ContextTextIndexer i dt
 update docId doc' w ix
   = insert doc' w ix'
@@ -89,10 +92,12 @@ modify f wrds dId (ii,dt)
   newDocTable = Dt.adjust f dId dt
   newIndex    = TIx.addWords wrds dId ii
 --}
+
 -- | Delete a set if documents by 'URI'.
-deleteDocsByURI :: TextIndexerConVal i m val 
+deleteDocsByURI :: TextIndexerConVal i m val
                 => Set (Key val) -> ContextIndex i Occurrences -> m (ContextIndex i Occurrences)
 deleteDocsByURI us ix = undefined
+
 {--
     = delete ixx docIds
     where
@@ -111,7 +116,7 @@ delete (ix,dt) dIds
 -- | Modify the description of a document and add words
 --   (occurrences for that document) to the index.
 modifyWithDescription :: (TextIndexerCon i dt)
-                      => Description -> Words -> DocId 
+                      => Description -> Words -> DocId
                       -> ContextTextIndexer i dt -> ContextTextIndexer i dt
 modifyWithDescription descr wrds dId (ii,dt)
   = (newIndex, newDocTable)
