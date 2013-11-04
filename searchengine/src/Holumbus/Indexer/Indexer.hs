@@ -7,4 +7,3 @@ type Indexer i v dt = (i v, dt)
 
 -- | Generic combination of Index and DocTable using Contexts
 type ContextIndexer i v dt = (ContextIndex i v, dt)
-
