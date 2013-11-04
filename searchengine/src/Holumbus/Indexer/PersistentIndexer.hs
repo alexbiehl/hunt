@@ -23,6 +23,7 @@ import qualified Holumbus.Index.Index              as Ix
 import qualified Holumbus.Index.TextIndex          as TIx
 import           Holumbus.Index.Proxy.ContextIndex (ContextIndex)
 import qualified Holumbus.Index.Proxy.ContextIndex as CIx
+import           Holumbus.Index.InvertedIndex      (InvertedIndex(..))
 
 import           Holumbus.Indexer.Indexer
 import           Database.Persist
@@ -40,9 +41,12 @@ type TextIndexerConVal i m val = ( TIx.TextIndex i Occurrences
 
 class PersistEntity x => Indexable x where
   toDocId :: Key x -> DocId
-  
+  fromDocId :: DocId -> Key x  
 
 -- ----------------------------------------------------------------------------
+
+empty :: TextIndexerCon InvertedIndex m => m (ContextIndex InvertedIndex Occurrences)
+empty = return $ CIx.empty 
 
 -- | Insert a Document and Words.
 insert :: TextIndexerConVal i m val
