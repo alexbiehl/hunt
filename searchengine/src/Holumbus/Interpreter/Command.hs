@@ -21,19 +21,19 @@ data InsertOption
 
 type UnparsedQuery = Text
 
-data Command
+data Command dt
   = Search     { icQuery    :: Either UnparsedQuery Query 
                , page       :: Int
                , perPage    :: Int
                }
   | Completion { icPrefix   :: Text }
-  | Insert     { icDoc      :: ApiDocument
+  | Insert     { icDoc      :: dt
                , icInsOpt   :: InsertOption
                }
   | Delete     { icUri      :: Set URI }
   | LoadIx     { icPath     :: FilePath }
   | StoreIx    { icPath     :: FilePath }
-  | Sequence   { icCmdSeq   :: [Command] }
+  | Sequence   { icCmdSeq   :: [Command dt] }
   | NOOP
   deriving (Show)
 
@@ -66,7 +66,7 @@ instance ToJSON InsertOption where
     Replace -> "replace"
     Modify  -> "modify"
 
-instance ToJSON Command where
+instance (ToJSON dt) => ToJSON (Command dt) where
   toJSON o = case o of
     Search q p pp -> object . cmd "search"      $ [ "query" .= q, "page" .= p, "perPage" .=pp ]
     Completion s  -> object . cmd "completion"  $ [ "text"  .= s ]
@@ -82,7 +82,7 @@ instance ToJSON Command where
     where
     cmd c = (:) ("cmd" .= (c :: Text))
 
-instance FromJSON Command where
+instance FromJSON dt => FromJSON (Command dt) where
   parseJSON (Object o) = do
     c <- o .: "cmd"
     case (c :: Text) of

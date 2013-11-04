@@ -19,6 +19,8 @@ import           Holumbus.Common                   hiding (delete)
 import           Holumbus.Common.DocIdMap          (toDocIdSet)
 import qualified Holumbus.Common.Document          as Doc
 
+import           Holumbus.Common 
+import           Holumbus.Common.ApiDocument
 import qualified Holumbus.Index.Index              as Ix
 import qualified Holumbus.Index.TextIndex          as TIx
 import           Holumbus.Index.Proxy.ContextIndex (ContextIndex)
@@ -39,10 +41,22 @@ type TextIndexerConVal i m val = ( TIx.TextIndex i Occurrences
                                  , Indexable val
                                  )
 
+-- like apidocument but without doc info
+data IndexInfo = IndexInfo 
+  { ixInfoUri :: URI
+  , ixInfoIndexMap :: M.Map Context (Either WordList TextData)
+  }
+
+ixInfoToApiDoc :: IndexInfo -> ApiDocument
+ixInfoToApiDoc (IndexInfo uri info) = ApiDocument uri info (M.empty)
+
 class PersistEntity x => Indexable x where
   toDocId :: Key x -> DocId
   fromDocId :: DocId -> Key x  
 
+  toURI :: x -> URI
+  getIndexedVals :: x -> IndexInfo 
+  
 -- ----------------------------------------------------------------------------
 
 empty :: TextIndexerCon InvertedIndex m => m (ContextIndex InvertedIndex Occurrences)
@@ -51,8 +65,7 @@ empty = return $ CIx.empty
 -- | Insert a Document and Words.
 insert :: TextIndexerConVal i m val
        => val -> Words -> ContextIndex i Occurrences -> m (ContextIndex i Occurrences)
-insert entity wrds ix
-    = do 
+insert entity wrds ix = do 
       dbId <- DB.insert entity
       return $ TIx.addWords wrds (toDocId dbId) ix
 
@@ -75,12 +88,12 @@ modify f wrds dId (ii,dt)
   where
   newDocTable = Dt.adjust f dId dt
   newIndex    = TIx.addWords wrds dId ii
-
-
+--}
 -- | Delete a set if documents by 'URI'.
-deleteDocsByURI :: TextIndexerCon i dt 
-                => Set URI -> ContextTextIndexer i dt -> ContextTextIndexer i dt
-deleteDocsByURI us ixx@(_ix,dt)
+deleteDocsByURI :: TextIndexerConVal i m val 
+                => Set (Key val) -> ContextIndex i Occurrences -> m (ContextIndex i Occurrences)
+deleteDocsByURI us ix = undefined
+{--
     = delete ixx docIds
     where
     docIds = toDocIdSet . catMaybesSet . S.map (Dt.lookupByURI dt) $ us

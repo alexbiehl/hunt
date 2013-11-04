@@ -43,7 +43,7 @@ import           Holumbus.Common
 import           Holumbus.Server.Common
 import qualified Holumbus.Server.Template             as Tmpl
 --import qualified Holumbus.Server.Interpreter          as Ip
-import           Holumbus.Interpreter.Command
+import           Holumbus.Interpreter.Command         hiding (Command)
 import           Holumbus.Interpreter.Interpreter
 
 import           Holumbus.Common.ApiDocument

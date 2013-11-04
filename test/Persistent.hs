@@ -35,6 +35,9 @@ wordList = M.fromList $ [("word", [1,5,10])]
 wrds :: Word -> Words
 wrds w = M.fromList $ [(w, wordList)]
 
+-- | this should be a more generic implementation since
+--   should look the same for every entity from
+--   the same database backend. 
 instance Ixx.Indexable (PersonGeneric SqlBackend) where
   toDocId (Key (PersistInt64 id)) = fromIntegral id
   toDocId _                       = error "not supported"

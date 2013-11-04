@@ -1,7 +1,9 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module Holumbus.Interpreter.Interpreter where
+module Holumbus.Interpreter.PersistentInterpreter where
 
 import           Control.Concurrent.MVar
 import           Control.Monad.Error
@@ -23,12 +25,12 @@ import           Holumbus.Common.Occurrences       (Occurrences)
 
 import           Holumbus.Analyzer.Analyzer
 
-import           Holumbus.Indexer.TextIndexer      (ContextTextIndexer)
-import qualified Holumbus.Indexer.TextIndexer      as Ixx
+import qualified Holumbus.Indexer.PersistentIndexer      as Ixx
 
 import           Holumbus.Index.InvertedIndex
 import           Holumbus.Index.Proxy.ContextIndex (ContextIndex)
 import qualified Holumbus.Index.Proxy.ContextIndex as CIx
+import           Holumbus.Index.TextIndex
 
 import           Holumbus.Query.Fuzzy
 import           Holumbus.Query.Language.Grammar
@@ -41,6 +43,11 @@ import           Holumbus.DocTable.HashedDocuments as HDt
 
 import           Holumbus.Interpreter.Command      hiding (Command)
 import qualified Holumbus.Interpreter.Command      as Cmd
+
+import           Database.Persist
+import           Database.Persist.Sql
+--import           Data.Conduit
+import Control.Monad.Trans.Control
 -- ----------------------------------------------------------------------------
 --
 -- the semantic domains (datatypes for interpretation)
@@ -54,12 +61,12 @@ import qualified Holumbus.Interpreter.Command      as Cmd
 -- but right now its okay to have the indexer
 -- replaceable by a type declaration
 
-type IpIndexer = ContextTextIndexer InvertedIndex (Documents Document)
+type IpIndexer = ContextIndex InvertedIndex Occurrences 
 
 type Command = Cmd.Command ApiDocument
 
 emptyIndexer    :: IpIndexer
-emptyIndexer    = (CIx.empty, HDt.empty)
+emptyIndexer    = CIx.empty
 
 -- ----------------------------------------------------------------------------
 
@@ -74,10 +81,21 @@ emptyOptions = Options
     }
 -}
 
-data Options = Options
+data Options = Options {
+  getDbPool :: ConnectionPool
+}
 
-emptyOptions :: Options
-emptyOptions = Options
+{--
+runDB :: (PersistConfig c
+         , PersistConfigBackend c ~ SqlPersistT
+         , MonadBaseControl IO (CMT IO))
+      => PersistConfigBackend c CM a
+      -> CM a
+runDB f = do
+    opts <- asks evOptions
+    runSqlPool f (getDbPool opts)
+--}
+runDB = undefined
 
 -- ----------------------------------------------------------------------------
 --
@@ -189,10 +207,10 @@ execSequence (c : cs) = execCmd c >> execSequence cs
 
 execInsert :: ApiDocument -> InsertOption -> IpIndexer -> CM (IpIndexer, CmdResult)
 execInsert doc op ixx = do
-    --split <- asks (opSplitter . evOptions)
-    let split = toDocAndWords
+    let split = undefined -- toDocAndWords
     let (docs, ws) = split doc
-    let ix'        = Ixx.insert docs ws ixx
+    let ix' = ixx
+    -- ix'        <- runDB $ Ixx.insert docs ws ixx
     case op of
         New     -> return (ix', ResOK) -- TODO: not the real deal yet
         x       -> throwNYI $ show x
@@ -202,14 +220,15 @@ execSearch' :: (Result Document -> CmdResult)
             -> Either Text Query
             -> IpIndexer
             -> CM CmdResult
-execSearch' f q (ix, dt)
+execSearch' f q ix
     = case q of
         Right qry -> runQ qry
         Left  str ->
           case parseQuery (T.unpack str) of
             Right qry -> runQ qry
             Left  err -> throwResError 500 err
-    where runQ qry = runQueryM ix dt qry >>= return . f
+    ------------------------------FIX ME----------------------
+    where runQ qry = runQueryM ix (HDt.empty) qry >>= return . f
 
 wrapSearch :: Int -> Int -> Result Document -> CmdResult
 wrapSearch p pp d
@@ -229,9 +248,9 @@ wrapCompletion
 
 
 execDelete :: Set URI -> IpIndexer -> CM (IpIndexer, CmdResult)
-execDelete d ix = do
-    let ix' = Ixx.deleteDocsByURI d ix
-    return (ix', ResOK)
+execDelete d ix = undefined
+--    let ix' = Ixx.deleteDocsByURI d ix
+--    return (ix', ResOK)
 
 
 execStore :: (Bin.Binary a) =>

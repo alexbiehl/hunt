@@ -46,6 +46,7 @@ library
                , text                   >= 0.11
                , unix                   >= 2.3 && < 3
                , persistent             >= 1.2.3
+               , monad-control              
 
   exposed-modules:
     Data.Text.Binary
@@ -81,6 +82,7 @@ library
     Holumbus.Indexer.TextIndexer
     Holumbus.Indexer.PersistentIndexer
 
+    Holumbus.Interpreter.PersistentInterpreter
     Holumbus.Interpreter.Interpreter
     Holumbus.Interpreter.Command
  
