@@ -6,6 +6,8 @@ module Main where
 
 import qualified Data.Map                             as M
 import           Data.Monoid
+import qualified Data.StringMap                       as SM
+
 
 import           Test.Framework
 import           Test.Framework.Providers.HUnit
@@ -43,7 +45,7 @@ insertTest :: (Ix.ISearchOp i v ~ TextSearchOp, Ix.Index i, Eq (Ix.IVal i v), (I
               i v -> Ix.IKey i v -> Ix.IVal i v -> Bool
 insertTest emptyIndex k v = v == nv
   where
-  [(_,nv)] = Ix.search PrefixNoCase k $ Ix.insert k v emptyIndex
+  [(_,nv)] = SM.toList $ Ix.search PrefixNoCase k $ Ix.insert k v emptyIndex
 
 
 -- v1 and v2 need the have the same id
@@ -52,7 +54,7 @@ mergeTest :: (Ix.ICon i v, Ix.Index i, Ix.ISearchOp i v ~ TextSearchOp
              i v -> Ix.IKey i v -> Occurrences -> Occurrences -> Bool
 mergeTest emptyIndex k v1 v2 = length res == 1 && merge v1 v2 == nv
   where
-  res@[(_,nv)] = Ix.search PrefixNoCase k $ Ix.insert k v1 . Ix.insert k v2 $ emptyIndex
+  res@[(_,nv)] = SM.toList $ Ix.search PrefixNoCase k $ Ix.insert k v1 . Ix.insert k v2 $ emptyIndex
 
 
 -- | check DmPrefixTree
@@ -96,7 +98,7 @@ insertTestContextIx
     True @?= newElem == insertedElem
   where
   newElem = singleton 1 1
-  [(_, insertedElem)] = ConIx.searchWithCx PrefixNoCase "context" "word"
+  [(_, [(_, insertedElem)])] = ConIx.resToList $ ConIx.searchWithCx PrefixNoCase "context" "word"
                             $ ConIx.insertWithCx "context" "word" newElem emptyIndex
   emptyIndex :: ConIx.ContextIndex InvIx.InvertedIndex Occurrences
   emptyIndex = ConIx.empty
@@ -115,7 +117,7 @@ insertTestContext = "test" @?= insertedContext
 addWordsTest :: Assertion
 addWordsTest = True @?= length resList == 1
   where
-  resList = ConIx.searchWithCx PrefixNoCase "default" "word" $ resIx
+  resList = snd . head . ConIx.resToList $ ConIx.searchWithCx PrefixNoCase "default" "word" $ resIx
   resIx = addWords (wrds "default") 1 emptyIndex
   emptyIndex :: ConIx.ContextIndex InvIx.InvertedIndex Occurrences
   emptyIndex =  ConIx.empty

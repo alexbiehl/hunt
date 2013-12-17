@@ -77,6 +77,7 @@ merge                   :: Occurrences -> Occurrences -> Occurrences
 merge                   = DM.unionWith IS.union
 
 -- | Difference of occurrences.
+--   NOTE: This is a shallow difference - see 'subtract' for a deep difference.
 difference              :: Occurrences -> Occurrences -> Occurrences
 difference              = DM.difference
 

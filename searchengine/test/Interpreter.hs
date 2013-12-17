@@ -51,10 +51,18 @@ test_insertEmpty = do
   (res, _env) <- testRunCmd batchCmd
   True @=? isRight res
 
+-- XXX: execCmd / execCmdSimple
+eCmd :: Command -> CM InvertedIndex (Documents Document) CmdResult
+eCmd = execCmdSimple
+
+-- XXX: runCmd / runCmdSimple
+rCmd :: Env InvertedIndex (Documents Document) -> Command -> IO (Either CmdError CmdResult)
+rCmd = runCmdSimple
+
 testRunCmd :: Command -> IO (Either CmdError CmdResult, TestEnv)
 testRunCmd cmd = do
   env <- initEnv emptyIndexer rankConfig emptyOptions
-  res <- runCmd env cmd
+  res <- rCmd env cmd
   return (res, env)
 
 
@@ -130,13 +138,13 @@ test_insertAndSearch = do
 test_alot :: Assertion
 test_alot = testCM $ do
   --throwNYI "user error"
-  insCR <- execCmd insertDefaultContext
+  insCR <- eCmd insertDefaultContext
   liftIO $ ResOK @=? insCR
-  insR <- execCmd $ Insert brainDoc
+  insR <- eCmd $ Insert brainDoc
   liftIO $ ResOK @=? insR
-  seaR <- execCmd $ Search (QWord QNoCase "Brain") os pp
+  seaR <- eCmd $ Search (QWord QNoCase "Brain") os pp
   liftIO $ ["test://0"] @=? searchResultUris seaR
-  seaR2 <- execCmd $ Search (QWord QCase "brain") os pp
+  seaR2 <- eCmd $ Search (QWord QCase "brain") os pp
   liftIO $ [] @=? searchResultUris seaR2
   where
   os = 0
@@ -146,7 +154,7 @@ test_alot = testCM $ do
 -- fancy functions
 -- characters were chosen without any reason
 (@@@) :: Command -> (CmdResult -> IO b) -> TestCM b
-a @@@ f = execCmd a >>= liftIO . f
+a @@@ f = eCmd a >>= liftIO . f
 
 (@@=) :: Command -> CmdResult -> TestCM ()
 a @@= b = a @@@ (@?=b)
@@ -171,7 +179,6 @@ test_fancy = testCM $ do
   -- insert yields the correct result value
   Insert brainDoc
     @@= ResOK
-
   -- searching "Brain" leads to the doc
   Search (QWord QNoCase "Brain") os pp
     @@@ ((@?= ["test://0"]) . searchResultUris)

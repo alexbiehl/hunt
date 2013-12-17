@@ -14,8 +14,6 @@ import           Holumbus.Common.BasicTypes
 import           Holumbus.Common.DocIdMap          as DM
 import           Holumbus.Index.Index
 
-import           Holumbus.Utility
-
 -- ----------------------------------------------------------------------------
 
 newtype DmPrefixTree v
@@ -55,19 +53,14 @@ instance Index DmPrefixTree where
     search t k (DmPT pt)
         = case t of
             Case         -> case SM.lookup k pt of
-                              Nothing -> []
-                              Just xs -> [(k,xs)]
-            NoCase       -> luCase k pt
-            PrefixCase   -> pfCase k pt
-            PrefixNoCase -> pfNoCase k pt
-        where
-        toL      = SM.toListShortestFirst
-        luCase   = toL .:: SM.lookupNoCase
-        pfCase   = toL .:: SM.prefixFilter
-        pfNoCase = toL .:: SM.prefixFilterNoCase
+                              Nothing -> SM.empty
+                              Just v  -> SM.singleton k v
+            NoCase       -> SM.lookupNoCase k pt
+            PrefixCase   -> SM.prefixFilter k pt
+            PrefixNoCase -> SM.prefixFilterNoCase k pt
 
     lookupRange k1 k2 (DmPT pt)
-        = SM.toList $ SM.lookupRange k1 k2 pt
+        = SM.lookupRange k1 k2 pt
 
     unionWith op (DmPT pt1) (DmPT pt2)
         = mkDmPT $ SM.unionWith op pt1 pt2

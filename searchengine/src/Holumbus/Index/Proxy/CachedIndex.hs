@@ -4,12 +4,11 @@ where
 import qualified Prelude                    as P
 
 import           Control.DeepSeq
-import           Control.Arrow              (second)
 
 import qualified Data.IntSet                as IS
+import           Data.StringMap             (StringMap)
 
 import           Holumbus.Common.DocIdMap   (DocIdMap, DocIdSet)
-import qualified Holumbus.Common.DocIdMap   as DM
 import           Holumbus.Index.Index
 import           Prelude                    as P
 
@@ -87,9 +86,15 @@ instance Index (CachedIndex impl) where
 
 -- ----------------------------------------------------------------------------
 
+-- FIXME: implement - map delete - is this efficient enough?
+filterResult :: IS.IntSet -> StringMap v -> StringMap v
+filterResult = const id
+
+{-
 filterResult :: IS.IntSet -> [(d, DocIdMap v)] -> [(d, DocIdMap v)]
 filterResult c = P.map (second (flip deleteIds c))
     where deleteIds = IS.foldr DM.delete
+-}
 
 flatten :: (ICon impl v, Index impl) => CachedIndex impl v -> CachedIndex impl v
 flatten (CachedIx c i) = mkCachedIx IS.empty (batchDelete c i)

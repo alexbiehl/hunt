@@ -11,7 +11,7 @@ import           Network.Wai.Middleware.RequestLogger
 import           Holumbus.Common
 
 import           Holumbus.Interpreter.Command
-import           Holumbus.Interpreter.Interpreter
+import qualified Holumbus.Interpreter.Interpreter     as Ip
 
 import           Holumbus.Query.Language.Parser
 import           Holumbus.Query.Ranking
@@ -25,7 +25,7 @@ import           Holumbus.Server.Schrotty
 start :: IO ()
 start = do
   -- init interpreter
-  env <- initEnv emptyIndexer defaultRankConfig emptyOptions
+  env <- Ip.initEnv Ip.emptyIndexer defaultRankConfig Ip.emptyOptions
 
   -- start schrotty
   schrotty 3000 $ do
@@ -36,7 +36,7 @@ start = do
     -- ------------------------------------------------------------------------
     -- XXX: maybe move to schrotty?
 
-    let interpret = runCmd env
+    let interpret = Ip.runCmdSimple env
 
     let eval cmd = do
         res <- liftIO $ interpret cmd

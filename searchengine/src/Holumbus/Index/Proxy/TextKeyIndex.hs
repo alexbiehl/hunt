@@ -66,10 +66,10 @@ instance Index (TextKeyProxyIndex impl) where
         = first pack <$> toList i
 
     search t k (TKPIx i)
-        = first pack <$> search t (unpack k) i
+        = search t (unpack k) i
 
     lookupRange k1 k2 (TKPIx i)
-        = first pack <$> lookupRange (unpack k1) (unpack k2) i
+        = lookupRange (unpack k1) (unpack k2) i
 
     unionWith op (TKPIx i1) (TKPIx i2)
         = mkTKPIx $ unionWith op i1 i2
@@ -113,10 +113,10 @@ instance Index (TextKeyProxyIndex (ComprOccIndex impl to)) where
         = first pack <$> toList i
 
     search t k (TKPIx i)
-        = first pack <$> search t (unpack k) i
+        = search t (unpack k) i
 
     lookupRange k1 k2 (TKPIx i)
-        = first pack <$> lookupRange (unpack k1) (unpack k2) i
+        = lookupRange (unpack k1) (unpack k2) i
 
     unionWith op (TKPIx i1) (TKPIx i2)
         = mkTKPIx $ unionWith op i1 i2

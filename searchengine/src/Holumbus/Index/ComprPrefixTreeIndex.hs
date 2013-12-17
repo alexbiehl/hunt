@@ -62,10 +62,10 @@ instance Index ComprOccPrefixTree where
         = second decompressOcc <$> toList i
 
     search t k (ComprPT i)
-        = second decompressOcc <$> search t k i
+        = SM.map decompressOcc $ search t k i
 
     lookupRange k1 k2 (ComprPT i)
-        = second decompressOcc <$> lookupRange k1 k2 i
+        = SM.map decompressOcc $ lookupRange k1 k2 i
 
     unionWith op (ComprPT i1) (ComprPT i2)
         = mkComprPT $ unionWith (\o1 o2 -> compressOcc $ op (decompressOcc o1) (decompressOcc o2)) i1 i2

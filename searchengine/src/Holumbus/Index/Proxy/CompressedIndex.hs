@@ -13,6 +13,7 @@ import           Control.Arrow                           (second)
 import           Control.DeepSeq
 
 import           Data.Binary                             (Binary (..))
+import qualified Data.StringMap                          as SM
 
 import           Holumbus.Index.Index
 import qualified Holumbus.Index.Index                    as Ix
@@ -63,10 +64,10 @@ instance Index (ComprOccIndex impl to) where
         = second decompressOcc <$> toList i
 
     search t k (ComprIx i)
-        = second decompressOcc <$> search t k i
+        = SM.map decompressOcc $ search t k i
 
     lookupRange k1 k2 (ComprIx i)
-        = second decompressOcc <$> lookupRange k1 k2 i
+        = SM.map decompressOcc $ lookupRange k1 k2 i
 
     unionWith op (ComprIx i1) (ComprIx i2)
         = mkComprIx $ unionWith (\o1 o2 -> compressOcc $ op (decompressOcc o1) (decompressOcc o2)) i1 i2

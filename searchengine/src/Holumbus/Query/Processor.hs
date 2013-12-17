@@ -30,6 +30,10 @@ module Holumbus.Query.Processor
 
 ,  ProcessConfig (..)
 ,  ProcessState
+
+  -- TODO: cleanup exports
+, SimpleResult
+, processQuerySimple
 )
 
 where
@@ -43,8 +47,11 @@ import           Data.Binary                       (Binary)
 import qualified Data.Binary                       as Bin
 import           Data.Function
 import qualified Data.List                         as L
+import           Data.Map                          (Map)
 import qualified Data.Map                          as M
 import           Data.Maybe
+import           Data.StringMap                    (StringMap)
+import qualified Data.StringMap                    as SM
 import           Data.Text                         (Text)
 import qualified Data.Text                         as T
 
@@ -53,6 +60,7 @@ import           Holumbus.Utility
 import           Holumbus.Common
 import qualified Holumbus.Common.DocIdMap          as DM
 import qualified Holumbus.Common.Positions         as Pos
+import qualified Holumbus.Common.Occurrences       as Occ
 import           Holumbus.Index.TextIndex
 
 import           Holumbus.Index.Proxy.ContextIndex (ContextIndex)
@@ -116,6 +124,48 @@ instance MonadTrans (ProcessorT ix) where
 
 type Processor ix = ProcessorT ix IO
 
+-- ----------------------------------------------------------------------------
+-- new intermediate stuff
+
+type Uq = Map Context (StringMap Occurrences)
+
+type SimpleResult e = [e]
+
+unionsUq :: [Uq] -> Uq
+unionsUq = L.foldl' unionUq M.empty
+
+-- XXX: this is obviously incorrect and code duplication -> just for testing
+unionsSM :: [StringMap Occurrences] -> StringMap Occurrences
+unionsSM = L.foldl' (SM.unionWith (Occ.merge)) SM.empty
+
+unionUq :: Uq -> Uq -> Uq
+unionUq = M.unionWith (SM.unionWith (Occ.merge))
+
+-- FIXME: no SM.intersectionWith?
+intersectionUq :: Uq -> Uq -> Uq
+intersectionUq = M.intersectionWith (SM.intersectionWith (Occ.merge))
+
+differenceUq :: Uq -> Uq -> Uq
+differenceUq = M.unionWith (SM.differenceWith differenceOcc)
+  where
+  differenceOcc x y = let res = Occ.subtract x y
+            in if DM.null res then Nothing else Just res
+
+-- FIXME: implement
+toResultUq :: (Applicative m, Monad m, DocTable d, e ~ Dt.DValue d, e ~ Document) =>
+              d -> Uq -> m (Result e)
+toResultUq = error "toResultUq nyi"
+
+
+toSimpleResultUq :: (Applicative m, Monad m, DocTable d, e ~ Dt.DValue d, e ~ Document) =>
+              d -> Uq -> m (SimpleResult e)
+toSimpleResultUq d i = occsToDocs . map snd . concatMap snd . CIx.resToList $ i
+  where
+  --occsToDocs :: Occurrences -> m [Document]
+  occsToDocs = mapM (fmap fromJust' . Dt.lookup d) . L.nub . map fst . concatMap DM.toList -- XXX: dirty fromJust and slow nub
+  fromJust' (Just a) = a
+  fromJust' Nothing  = error "error: Processor.fromJust in toSimpleResultUq"
+  merge = L.foldl' Occ.merge Occ.empty
 
 -- ----------------------------------------------------------------------------
 -- | helper
@@ -182,9 +232,20 @@ processQuery :: (QueryIndexCon i, DocTable d, Dt.DValue d ~ e, e ~ Document)
 processQuery st d q = runErrorT . evalStateT (runProcessor processToRes) $ st
     where
     oq = if optimizeQuery (psConfig st) then optimize q else q
-    processToRes = process oq >>= \ir -> I.toResult d ir
+    processToRes = process oq >>= \ir -> toResultUq d ir
 
-process :: QueryIndexCon ix   => Query -> Processor ix Intermediate
+
+-- | Simple result datatype for now
+processQuerySimple :: (QueryIndexCon i, DocTable d, Dt.DValue d ~ e, e ~ Document)
+              => ProcessState i -> d -> Query -> IO (Either CmdError (SimpleResult e))
+processQuerySimple st d q = runErrorT . evalStateT (runProcessor processToRes) $ st
+    where
+    oq = if optimizeQuery (psConfig st) then optimize q else q
+    processToRes = process oq >>= \ir -> toSimpleResultUq d ir
+
+
+
+process :: QueryIndexCon ix   => Query -> Processor ix Uq
 process o = case o of
   QWord QCase w       -> forAllContexts . processWordCase      $ w
   QWord QNoCase w     -> forAllContexts . processWordNoCase    $ w
@@ -197,19 +258,20 @@ process o = case o of
                           pq1 <- process q1
                           pq2 <- process q2
                           processBin op pq1 pq2
-  QRange l h          -> processRange l h
+                          -- FIXME: change to same result type
+  QRange l h          -> undefined-- processRange l h
 
 
 -- TODO: previously rdeepseq
 -- TODO: parallelize mapM
 -- | Evaluate (the query) for all contexts.
 forAllContexts :: (QueryIndexCon i)
-               => ([Context] -> Processor i Intermediate) -> Processor i Intermediate
+               => ([Context] -> Processor i Uq) -> Processor i Uq
 forAllContexts f = getContexts >>= f
 
 forAllContexts' :: (QueryIndexCon i)
-                => (Context -> Processor i Intermediate) -> Processor i Intermediate
-forAllContexts' f = getContexts >>= mapM f >>= return . I.unions
+                => (Context -> Processor i Uq) -> Processor i Uq
+forAllContexts' f = getContexts >>= mapM f >>= return . unionsUq
 
 
 {-
@@ -230,23 +292,22 @@ forAllContexts' f = getContexts >>= mapM (\c -> get >>= f c) >>= return . I.unio
 --   which contain the word as prefix.
 processWord :: QueryIndexCon i
             => TextSearchOp -> Text -> [Context]
-            -> Processor i Intermediate
+            -> Processor i Uq
 processWord op q c = do
   st <- get
   ix <- getIx
-  return . I.fromListCx q c . limitWords st . toRawResult
-    $ CIx.searchWithCxs op c q ix
+  return $ CIx.searchWithCxs op c q ix
 
 -- | Case Sensitive variant of process Word
 processWordCase :: QueryIndexCon i
                 => Text -> [Context]
-                -> Processor i Intermediate
+                -> Processor i Uq
 processWordCase = processWord PrefixCase
 
 -- | Case Insensitive variant of process Word
 processWordNoCase :: QueryIndexCon i
                   => Text -> [Context]
-                  -> Processor i Intermediate
+                  -> Processor i Uq
 processWordNoCase = processWord PrefixNoCase
 
 -- | Calculates a set of Fuzzy words and queries for all of them
@@ -254,11 +315,11 @@ processWordNoCase = processWord PrefixNoCase
 --   XXX TODO: Optimize Performance
 --               - mapConcurrent
 --               - upper bound for size of fuzzyset
-processFuzzyWord :: QueryIndexCon i => Text -> Processor i Intermediate
+processFuzzyWord :: QueryIndexCon i => Text -> Processor i Uq
 processFuzzyWord q = do
   cfg <- getFuzzyConfig
   is <- mapM (forAllContexts . processWordNoCase . fst) $ fuzzySet cfg
-  return . I.unions $ is
+  return . unionsUq $ is
   where
   fuzzySet cfg = (q,0):(F.toList $ F.fuzz cfg q)
 
@@ -270,24 +331,24 @@ processFuzzyWord q = do
 processPhrase :: QueryIndexCon i
               => TextSearchOp
               -> Text -> [Context]
-              -> Processor i Intermediate
+              -> Processor i Uq
 processPhrase op q c = do
     ix <- getIx
     processPhraseInternal (meaningfulName ix) q c
     where
-    meaningfulName ix t = toRawResult $ CIx.searchWithCxs op c t ix
+    meaningfulName ix t = toRawResultUq $ CIx.searchWithCxs op c t ix
 
-processPhraseCase   :: QueryIndexCon i => Text -> [Context] -> Processor i Intermediate
+processPhraseCase   :: QueryIndexCon i => Text -> [Context] -> Processor i Uq
 processPhraseCase   = processPhrase Case
 
-processPhraseNoCase :: QueryIndexCon i => Text -> [Context] -> Processor i Intermediate
+processPhraseNoCase :: QueryIndexCon i => Text -> [Context] -> Processor i Uq
 processPhraseNoCase = processPhrase NoCase
 
-processPhraseFuzzy  :: QueryIndexCon i => Text -> Processor i Intermediate
+processPhraseFuzzy  :: QueryIndexCon i => Text -> Processor i Uq
 processPhraseFuzzy q = do
   cfg <- getFuzzyConfig
   is <- mapM (forAllContexts . processPhraseNoCase . fst) $ fuzzySet cfg
-  return . I.unions $ is
+  return . unionsUq $ is
   where
   fuzzySet cfg = (q,0):(F.toList $ F.fuzz cfg q)
 
@@ -295,10 +356,12 @@ processPhraseFuzzy q = do
 -- | Process a phrase query by searching for every word of the phrase and comparing their positions.
 processPhraseInternal :: QueryIndexCon i
                       => (Text -> RawResult) -> Text -> [Context]
-                      -> Processor i Intermediate
+                      -> Processor i Uq
+processPhraseInternal = error "processPhraseInternal nyi"
+{-
 processPhraseInternal f q c =
   if DM.null result
-    then return $ I.empty
+    then return $ M.empty
     else return $ I.fromListCx q c [(q, processPhrase' ws 1 result)]
   where
   result = mergeOccurrencesList $ map snd $ f w
@@ -313,11 +376,12 @@ processPhraseInternal f q c =
           where
             hasSuccessor :: Positions -> Bool
             hasSuccessor w' = Pos.foldr (\cp r -> r || Pos.member (cp + p) w') False np
+-}
 
 -- ----------------------------------------------------------------------------
 -- Range Query
 -- ----------------------------------------------------------------------------
-processRange :: QueryIndexCon i => Text -> Text -> Processor i Intermediate
+processRange :: QueryIndexCon i => Text -> Text -> Processor i Uq
 processRange l h = forAllContexts' range
   where
   range c = do
@@ -339,12 +403,11 @@ processRange l h = forAllContexts' range
     case cType of
       _ -> processRange' (unbox ls') (unbox hs') c
 
-  processRange' :: QueryIndexCon i => Text -> Text -> Context -> Processor i Intermediate
+  processRange' :: QueryIndexCon i => Text -> Text -> Context -> Processor i Uq
   processRange' lo hi c = do
     st <- get
     ix <- getIx
-    return . I.fromList lo c . limitWords st . toRawResult -- FIXME: check I.fromList
-      $ CIx.lookupRange lo hi ix
+    return $ CIx.lookupRange lo hi ix
 
 {-
 -- | 'rangeString' with 'Text'.
@@ -403,10 +466,10 @@ succString = succString'
 
 -- | Process a binary operator by caculating the union or the intersection of the two subqueries.
 processBin :: QueryIndexCon i
-           => BinOp -> Intermediate -> Intermediate -> Processor i Intermediate
-processBin And    i1 i2 = return $ I.intersection i1 i2
-processBin Or     i1 i2 = return $ I.union        i1 i2
-processBin AndNot i1 i2 = return $ I.difference   i1 i2
+           => BinOp -> Uq -> Uq -> Processor i Uq
+processBin And    i1 i2 = return $ intersectionUq i1 i2
+processBin Or     i1 i2 = return $ unionUq        i1 i2
+processBin AndNot i1 i2 = return $ differenceUq   i1 i2
 
 
 -- ----------------------------------------------------------------------------
@@ -467,3 +530,8 @@ mergeOccurrencesList    = DM.unionsWith Pos.union
 -- XXX: no merging - just for results with a single context
 toRawResult :: [(Context, [(Word, Occurrences)])] -> RawResult
 toRawResult = concatMap snd
+
+
+-- FIXME: implement? only used in phrase processing?!
+toRawResultUq :: Map Context (StringMap Occurrences) -> RawResult
+toRawResultUq = undefined

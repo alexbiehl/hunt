@@ -1,18 +1,25 @@
 module Holumbus.Index.Proxy.ContextIndex where
 
-import           Control.Parallel.Strategies
+import           Prelude                      as P
+
+import           Control.Arrow                (second)
+
+--import           Control.Parallel.Strategies
 
 import           Data.Binary                  (Binary(..))
+import           Data.StringMap               (StringMap)
+import qualified Data.StringMap               as SM
 import           Data.Text.Binary             ()
 import           Data.Map.Strict              (Map)
 import qualified Data.Map.Strict              as M
+
 import           Holumbus.Common
 import qualified Holumbus.Index.Index         as Ix
 
 -- ----------------------------------------------------------------------------
 
 newtype ContextIndex impl v
-    = ContextIx (Map Context (impl v))
+    = ContextIx { contextIx :: Map Context (impl v) }
     deriving (Show)
 
 type ContextIxCon impl v
@@ -63,33 +70,42 @@ insert w v (ContextIx m) = ContextIx $ M.map (Ix.insert w v) m
 empty :: ContextIndex i v
 empty = ContextIx $ M.empty
 
+-- XXX: unused atm?
 search :: ContextIxCon i v
        => Ix.ISearchOp i v -> Ix.IKey i v -> ContextIndex i v
-       -> [(Context, [(Ix.IKey i v, Ix.IVal i v)])]
-search op k (ContextIx m) = M.toList $ M.map (Ix.search op k) m
+       -> Map Context (StringMap (Ix.IVal i v))
+search op k (ContextIx m) = M.map (Ix.search op k) m
 
 lookupRange :: ContextIxCon i v
        => Ix.IKey i v -> Ix.IKey i v -> ContextIndex i v
-       -> [(Context, [(Ix.IKey i v, Ix.IVal i v)])]
-lookupRange k1 k2 (ContextIx m) = M.toList $ M.map (Ix.lookupRange k1 k2) m
+       -> Map Context (StringMap (Ix.IVal i v))
+lookupRange k1 k2 (ContextIx m) = M.map (Ix.lookupRange k1 k2) m
 
 searchWithCx :: ContextIxCon i v
              => Ix.ISearchOp i v -> Context -> Ix.IKey i v -> ContextIndex i v
-             -> [(Ix.IKey i v, Ix.IVal i v)]
+             -> Map Context (StringMap (Ix.IVal i v)) -- ContextIndex i (StringMap (Ix.IVal i v))
+searchWithCx op c k (ContextIx m) = case M.lookup c m of
+      Just cm -> M.singleton c $ Ix.search op k cm
+      _       -> M.empty
+
+{-
 searchWithCx op c k (ContextIx m)
   = case M.lookup c m of
       (Just cm) -> Ix.search op k cm
       _         -> []
+-}
 
 searchWithCxs :: ContextIxCon i v
               => Ix.ISearchOp i v -> [Context] -> Ix.IKey i v -> ContextIndex i v
-              -> [(Context, [(Ix.IKey i v, Ix.IVal i v)])]
+              -> Map Context (StringMap (Ix.IVal i v))
 -- non parallel
--- searchWithCxs op cs k ix = concat $ L.map (\c -> searchWithCx op c k ix) cs
+searchWithCxs op cs k (ContextIx m) = (M.map (Ix.search op k) $ m)
+                            `M.intersection`
+                           (M.fromList $ P.map (\c -> (c,())) cs)
 -- parallel
 -- XXX: since we do not evaluate anything here
 -- we dont have any real parallelism right now
-searchWithCxs op cs k ix = parMap rseq (\c -> (c, searchWithCx op c k ix)) cs
+-- searchWithCxs op cs k ix = parMap rseq (\c -> (c, searchWithCx op c k ix)) cs
 
 
 -- | Contexts/keys of 'ContextIndex'.
@@ -104,3 +120,13 @@ hasContext c (ContextIx m) = M.member c m
 -- | Map a function iver all values of the 'ContextIndex'.
 map :: (i v -> j w) -> ContextIndex i v -> ContextIndex j w
 map f (ContextIx m) = ContextIx $ M.map f m
+
+
+toList :: ContextIxCon i v
+             => ContextIndex i v
+             -> [(Context, [(Ix.IKey i v, Ix.IVal i v)])]
+toList (ContextIx m) = P.map (second (Ix.toList)) $ M.toList m
+
+
+resToList :: Map Context (StringMap v) -> [(Context, [(SM.Key, v)])]
+resToList = P.map (second (SM.toList)) . M.toList

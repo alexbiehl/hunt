@@ -389,4 +389,103 @@ runQueryM       :: TextIndexerCon ix dt
                 -> IO (Either CmdError (QRes.Result (Dt.DValue (Documents Document))))
 runQueryM ix s dt q = processQuery st dt q
    where
+   -- TODO: 2?
    st = initState queryConfig ix s 2
+
+-- ----------------------------------------------------------------------------
+
+-- SimpleResult stuff
+
+-- code duplication to make different result/intermediate types work
+-- there will only be one version when all this stuff is said and done
+
+
+runQuerySimpleM :: TextIndexerCon ix dt
+                => ContextIndex ix Occurrences
+                -> Schema
+                -> dt
+                -> Query
+                -> IO (Either CmdError (SimpleResult (Dt.DValue (Documents Document))))
+runQuerySimpleM ix s dt q = processQuerySimple st dt q
+   where
+   -- TODO: 2?
+   st = initState queryConfig ix s 2
+
+
+
+runCmdSimple :: TextIndexerCon ix dt => Env ix dt -> Command -> IO (Either CmdError CmdResult)
+runCmdSimple env cmd
+    = runErrorT . runReaderT (runCMT . execCmdSimple $ cmd) $ env
+
+
+execCmdSimple :: (Bin.Binary dt) => TextIndexerCon ix dt => Command -> CM ix dt CmdResult
+execCmdSimple = execCmdSimple'
+
+execCmdSimple' :: (Bin.Binary dt, TextIndexerCon ix dt) => Command -> CM ix dt CmdResult
+execCmdSimple' (Search q offset mx)
+    = withIx $ execSearchSimple' (wrapSearchSimple offset mx) q
+
+execCmdSimple' (Completion q mx)
+    = withIx $ execSearchSimple' (wrapCompletionSimple mx) q
+
+execCmdSimple' (Sequence cs)
+    = execSequenceSimple cs
+
+execCmdSimple' NOOP
+    = return ResOK  -- keep alive test
+
+execCmdSimple' (Insert doc)
+    = modIx $ execInsert doc
+
+execCmdSimple' (Update doc)
+    = modIx $ execUpdate doc
+
+execCmdSimple' (Delete _uri)
+    = error "execCmdSimple' (Delete{})" --modIx $ execDelete uri
+
+execCmdSimple' (BatchDelete uris)
+    = modIx $ execBatchDelete uris
+
+execCmdSimple' (StoreIx filename)
+    = withIx $ execStore filename
+
+execCmdSimple' (LoadIx filename)
+    = modIx $ \_ix -> execLoad filename
+
+execCmdSimple' (InsertContext cx ct)
+    = modIx $ execInsertContext cx ct
+
+execCmdSimple' (DeleteContext cx)
+    = modIx $ execDeleteContext cx
+
+execSequenceSimple :: TextIndexerCon ix dt => [Command] -> CM ix dt CmdResult
+execSequenceSimple []       = execCmdSimple' NOOP
+execSequenceSimple [c]      = execCmdSimple' c
+execSequenceSimple (c : cs) = execCmdSimple' c >> execSequenceSimple cs
+
+
+execSearchSimple' :: TextIndexerCon ix dt
+            => (SimpleResult Document -> CmdResult)
+            -> Query
+            -> IpIndexer ix dt
+            -> CM ix dt CmdResult
+execSearchSimple' f q (ix, dt, s)
+    = do
+      r <- lift $ runQuerySimpleM ix s dt q
+      rc <- askRanking
+      case r of
+        (Left  err) -> throwError err
+        (Right res) -> return . f $ res
+
+
+wrapSearchSimple :: Int -> Int -> SimpleResult Document -> CmdResult
+wrapSearchSimple offset mx
+    = ResSearch
+      . mkLimitedResult offset mx
+
+-- XXX: always empty
+wrapCompletionSimple :: Int -> SimpleResult e -> CmdResult
+wrapCompletionSimple mx
+    = const $ ResCompletion []
+
+-- ----------------------------------------------------------------------------

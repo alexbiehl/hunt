@@ -5,6 +5,7 @@ import           GHC.Exts                       (Constraint)
 
 import           Control.DeepSeq
 import qualified Data.IntSet                    as IS
+import           Data.StringMap                 as SM
 
 import           Holumbus.Common
 
@@ -23,10 +24,11 @@ class Index i where
     type ISearchOp i v = TextSearchOp
 
     -- | General lookup function.
-    search       :: ICon i v => ISearchOp i v -> IKey i v -> i v -> [(IKey i v, IVal i v)]
+    search       :: ICon i v => ISearchOp i v -> IKey i v -> i v -> StringMap (IVal i v)
 
+    -- TODO: maybe make Range part of ISearchOp
     -- | Search within a range.
-    lookupRange  :: ICon i v => IKey i v -> IKey i v -> i v -> [(IKey i v, IVal i v)]
+    lookupRange  :: ICon i v => IKey i v -> IKey i v -> i v -> StringMap (IVal i v)
 
     -- | Insert occurrences.
     insert       :: ICon i v => IKey i v -> IVal i v -> i v -> i v
