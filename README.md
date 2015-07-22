@@ -1,6 +1,8 @@
 Hunt
 ====
 
+[![Join the chat at https://gitter.im/alexbiehl/hunt](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/alexbiehl/hunt?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 Hunt is a flexible, lightweight search platform written in Haskell.
 
 The default server implementation provides a powerful JSON-API and a simple web interface.
